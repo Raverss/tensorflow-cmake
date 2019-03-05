@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # 2018, Patrick Wieschollek <mail@patwie.com>
 
+from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 from user_ops import matrix_add
@@ -21,4 +22,4 @@ actual_op = matrix_add(A, B, bias)
 
 
 with tf.Session() as sess:
-  print sess.run(actual_op, {A: matA, B: matB})
+  print (sess.run(actual_op, {A: matA, B: matB}))
