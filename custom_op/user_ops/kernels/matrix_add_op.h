@@ -14,14 +14,15 @@ namespace functor {
 
 template <typename Device, typename Dtype>
 struct MatrixAddFunctor {
-  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& X,
-                     const Tensor& Y, Tensor* Z, Dtype bias);
+/*  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& X,
+                     const Tensor& Y, Tensor* Z, std::vector<float> ksize_, std::vector<float> stride_, Dtype bias);*/
+    static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& X, Tensor* Z, std::vector<float> stride_);
+
 };
 
 template <typename Device, typename Dtype>
 struct MatrixAddGrad {
-  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& topdiff_,
-                     Tensor* grad_X, Tensor* grad_Y);
+  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& topdiff_, Tensor* grad_X);
 };
 
 }  // namespace functor

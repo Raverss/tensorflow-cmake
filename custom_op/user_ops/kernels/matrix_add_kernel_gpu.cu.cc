@@ -1,5 +1,5 @@
 // 2018, Patrick Wieschollek <mail@patwie.com>
-
+/*
 #if GOOGLE_CUDA
 
 #define EIGEN_USE_GPU
@@ -108,3 +108,4 @@ template struct MatrixAddGrad<GPUDevice, double>;
 }  // namespace tensorflow
 
 #endif  // GOOGLE_CUDA
+*/

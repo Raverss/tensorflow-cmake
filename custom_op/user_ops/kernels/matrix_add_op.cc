@@ -13,26 +13,28 @@ template <typename Device, typename Dtype>
 class MatrixAddOp : public OpKernel {
  public:
   explicit MatrixAddOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr("bias", &bias_));
+    //OP_REQUIRES_OK(ctx, ctx->GetAttr("bias", &bias_));
+    //OP_REQUIRES_OK(ctx, ctx->GetAttr("ksize", &ksize_));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("stride", &stride_));
   }
 
   void Compute(OpKernelContext* ctx) override {
     const Tensor& X = ctx->input(0);
-    const Tensor& Y = ctx->input(1);
+    //const Tensor& Y = ctx->input(1);
 
     if (!ctx->status().ok()) {
       return;
     }
 
-    OP_REQUIRES(ctx, X.shape() == Y.shape(),
-                errors::InvalidArgument("Input shapes have to be the same"));
+    /*OP_REQUIRES(ctx, X.shape() == Y.shape(),
+                errors::InvalidArgument("Input shapes have to be the same"));*/
 
     const int N = X.dim_size(0);
     const int H = X.dim_size(1);
     const int W = X.dim_size(2);
     const int C = X.dim_size(3);
 
-    TensorShape output_shape({N, H, W, C});
+    TensorShape output_shape({N, static_cast<int>(round(H/stride_[0])), static_cast<int>(round(W/stride_[1])), C});
     // same as: output_shape.AddDim(N); ....
 
     Tensor* Z = nullptr;
@@ -40,13 +42,16 @@ class MatrixAddOp : public OpKernel {
     // same as "OP_REQUIRES_OK(ctx,ctx->allocate_output(0, X.tensor<Dtype,
     // 4>().shape(), &Z));"
 
-    ::tensorflow::functor::MatrixAddFunctor<Device, Dtype>::launch(ctx, X, Y, Z,
-                                                                   bias_);
+
+    //::tensorflow::functor::MatrixAddFunctor<Device, Dtype>::launch(ctx, X, Y, Z, ksize_, stride_, bias_);
+    ::tensorflow::functor::MatrixAddFunctor<Device, Dtype>::launch(ctx, X, Z, stride_);
   }
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(MatrixAddOp);
-  float bias_;
+//  float bias_;
+//  std::vector<float> ksize_;
+  std::vector<float> stride_;
 };
 
 // Backward-Pass (CPU, GPU)
@@ -58,20 +63,16 @@ class MatrixAddGradOp : public OpKernel {
 
   void Compute(OpKernelContext* ctx) override {
     const Tensor& X = ctx->input(0);
-    const Tensor& Y = ctx->input(1);
-    const Tensor& topdiff = ctx->input(2);
+    const Tensor& topdiff = ctx->input(1);
 
     if (!ctx->status().ok()) {
       return;
     }
 
     Tensor* grad_X = nullptr;
-    Tensor* grad_Y = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, X.shape(), &grad_X));
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(1, Y.shape(), &grad_Y));
 
-    ::tensorflow::functor::MatrixAddGrad<Device, Dtype>::launch(ctx, topdiff,
-                                                                grad_X, grad_Y);
+    ::tensorflow::functor::MatrixAddGrad<Device, Dtype>::launch(ctx, topdiff, grad_X);
   }
 };
 
@@ -86,7 +87,7 @@ REGISTER_CUSTOM_OP(MatrixAdd, CPU, float);
 REGISTER_CUSTOM_OP(MatrixAdd, CPU, double);
 REGISTER_CUSTOM_OP(MatrixAddGrad, CPU, float);
 REGISTER_CUSTOM_OP(MatrixAddGrad, CPU, double);
-
+/*
 #ifdef GOOGLE_CUDA
 REGISTER_CUSTOM_OP(MatrixAdd, GPU, float);
 REGISTER_CUSTOM_OP(MatrixAdd, GPU, double);
@@ -130,5 +131,5 @@ REGISTER_CUSTOM_OP(MatrixAddGrad, GPU, double);
 // TF_CALL_GPU_NUBER_TYPES_NO_HALF(REGISTER_ATRIXADD_OP_GPU);
 // #undef REGISTER_ATRIXADD_OP_GPU
 // #endif  // GOOGLE_CUDA
-
+*/
 }  // namespace tensorflow
