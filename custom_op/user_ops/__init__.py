@@ -37,6 +37,7 @@ def _MatrixAddGrad(op, *grads):
 #  bias = op.get_attr('bias')
   matA = op.inputs[0]
 #  matB = op.inputs[1]
-  # top = op.outputs[0]
+  top = op.outputs[0]
   topdiff = grads[0]
-  return matrix_add_grad(matA, matB, topdiff, bias=bias)
+#  return matrix_add_grad(matA, matB, topdiff, bias=bias)
+  return matrix_add_grad(matA, topdiff)

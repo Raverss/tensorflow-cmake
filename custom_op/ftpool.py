@@ -9,19 +9,22 @@ tf.set_random_seed(42)
 matA = np.array(
 [
 [
-[[10],[10],[10],[10]],
-[[10],[10],[10],[10]],
-[[10],[8],[8],[10]],
-[[10],[10],[10],[10]]
+[[10],[10],[8],[8]],
+[[10],[10],[8],[8]],
+[[2],[2],[6],[6]],
+[[2],[2],[6],[6]],
+[[4],[4],[1],[1]],
+[[4],[4],[1],[1]]
 ]
 ]
 , dtype=np.float32)
 print(matA.shape)
+print(matA[0, ..., 0])
 
 
-A = tf.placeholder(tf.float32, shape=[None, 4, 4, 1])
+A = tf.placeholder(tf.float32, shape=matA.shape)
 
-actual_op = matrix_add(A,(1.3,1.3))
+actual_op = matrix_add(A,(2,2))
 
 
 with tf.Session() as sess:

@@ -36,8 +36,8 @@ struct MatrixAddFunctor<CPUDevice, Dtype> {
                 for (float w = 0; w < W; w += stride_[1]){
                     if (round(w/stride_[1]) < Zt->dim_size(2) && round(h/stride_[0]) < Zt->dim_size(1)){
                         val = compute_component(w, h, stride_[1]*2, stride_[0]*2, W, H, X, n, c);
-//                        std::cout << n << " " << round(w/stride_[1]) << " " << round(h/stride_[0]) << " " << c << std::endl;
-                        Z(n, round(h/stride_[0]), round(w/stride_[1]), c) = val;
+//                        std::cout << "Z("<< n << "," << round(h/stride_[0]) << "," << round(w/stride_[1]) << "," << c << ") = " << val << std::endl;
+                        Z(n, static_cast<int>(round(h/stride_[0])), static_cast<int>(round(w/stride_[1])), c) = val;
                     }
                 }
             }
@@ -61,7 +61,7 @@ struct MatrixAddFunctor<CPUDevice, Dtype> {
       double power_y  = 0;
       double width_h  = static_cast<double>((width-1))/2.0;
       double height_h = static_cast<double>((height-1))/2.0;
-      double w;
+      double w = 0;
 
 
 
@@ -69,14 +69,16 @@ struct MatrixAddFunctor<CPUDevice, Dtype> {
           if (round(y) >= source_h) continue;
           if (round(y) < 0) continue;
           for (double x=start_x-width_h; x<=start_x+width_h; x++){
-              if (round(x) >= source_w) continue;
+              /*if (round(x) >= source_w) continue;
               if (round(x) < 0) continue;
               power_x = sin( 3.14*static_cast<double>(1 - static_cast<double>(abs(x-(start_x)) / width_h)) / 2 );
               power_y = sin( 3.14*static_cast<double>(1 - static_cast<double>(abs(y-(start_y)) / height_h)) / 2 );
               if (!power_x || !power_y) continue;
               w = power_x * power_y;
               comp += X(n, static_cast<int>(round(y)), static_cast<int>(round(w)), c) * w;
-              sum  += w;
+              sum  += w;*/
+              comp += X(n, static_cast<int>(round(y)), static_cast<int>(round(w)), c);
+              w += 1;
           }
       }
       if (!sum) return 0;
@@ -98,7 +100,18 @@ struct MatrixAddGrad<CPUDevice, Dtype> {
   static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& topdiff_,
                      Tensor* grad_mA_) {
     const int W = topdiff_.NumElements();
-    //std::cout << "hello world\n";
+    //std::cout << "size of grad_mA_ " << grad_mA_->NumElements() << std::endl;
+    //std::cout << "size of topdiff_ " << W << std::endl;
+    grad_mA_->flat<Dtype>().setZero();
+    Dtype* grad_X = grad_mA_->flat<Dtype>().data();
+    const Dtype* topdiff = topdiff_.flat<Dtype>().data();
+    int p = 1;
+    for (int i = 0; i < W; i++){
+        grad_X[i*4+0] = p * topdiff[i];
+        grad_X[i*4+1] = p * topdiff[i];
+        grad_X[i*4+2] = p * topdiff[i];
+        grad_X[i*4+3] = p * topdiff[i];
+    }
 /*    grad_mA_->flat<Dtype>().setZero();
     grad_mB_->flat<Dtype>().setZero();
 

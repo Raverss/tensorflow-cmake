@@ -23,17 +23,12 @@ REGISTER_OP("MatrixAdd")
     .Input("x: T")
 //    .Input("y: T")
     .Output("output: T")
- /*   .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
+   .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
       // we require the input to have 4 axes
       ShapeHandle shape_hnd;
       TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &shape_hnd));
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 4, &shape_hnd));
 
       ShapeHandle x_shape = c->input(0);
-      ShapeHandle y_shape = c->input(1);
-
-      // assert shapes of x and y are matching
-      TF_RETURN_IF_ERROR(c->Merge(x_shape, y_shape, &x_shape));
 
       // specify output-shape
       // this could be "c->set_output(0, x_shape);"
@@ -44,17 +39,16 @@ REGISTER_OP("MatrixAdd")
       auto C = c->Dim(c->input(0), 3);
 
       // we can also use the Attr here
-      float bias;
-      std::vector<float> ksize_;
       std::vector<float> stride_;
-      (void)c->GetAttr("bias", &bias);
-      (void)c->GetAttr("ksize", &ksize_);
-      (void)c->GetAttr("stide", &stride_);
+      c->GetAttr("stide", &stride_);
+
+      c->Divide(H, 2, true, &H);
+      c->Divide(W, 2, true, &W);
 
       c->set_output(0, c->MakeShape({N, H, W, C}));
 
       return Status::OK();
-    })*/
+    })
     .Doc(R"doc(
 Add two matrices and a constant
 
@@ -69,7 +63,9 @@ REGISTER_OP("MatrixAddGrad")
     .Output("grad_a: T")
     .Attr("T: realnumbertype")
     .SetShapeFn([](InferenceContext* c) {
-      c->set_output(0, c->input(0));  // grad_a has same shape as x
+
+    //c->set_output(0, c->MakeShape({N, H, W, C}));
+    c->set_output(0, c->input(0));  // grad_a has same shape as x
       return ::tensorflow::Status::OK();
     })
     .Doc(R"doc(
