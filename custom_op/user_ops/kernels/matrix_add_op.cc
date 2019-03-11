@@ -59,7 +59,9 @@ class MatrixAddOp : public OpKernel {
 template <typename Device, typename Dtype>
 class MatrixAddGradOp : public OpKernel {
  public:
-  explicit MatrixAddGradOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
+  explicit MatrixAddGradOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("stride", &stride_));
+    }
 
   void Compute(OpKernelContext* ctx) override {
     const Tensor& X = ctx->input(0);
@@ -71,9 +73,13 @@ class MatrixAddGradOp : public OpKernel {
 
     Tensor* grad_X = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, X.shape(), &grad_X));
-
+    //std::cout << "input shape is: " << X.shape() << std::endl; //input shape is: [32,26,26,2]
+    //std::cout << "gradient shape is " << topdiff.shape() << std::endl; //gradient shape is [32,13,13,2]
     ::tensorflow::functor::MatrixAddGrad<Device, Dtype>::launch(ctx, topdiff, grad_X);
   }
+
+private:
+  std::vector<float> stride_;
 };
 
 #define REGISTER_CUSTOM_OP(NAME, DEVICE, T)                       \

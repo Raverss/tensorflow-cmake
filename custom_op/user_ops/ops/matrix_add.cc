@@ -16,11 +16,11 @@ Status UnchangedShape(InferenceContext* c) {
 }  // namespace shape_inference
 
 REGISTER_OP("MatrixAdd")
+    .Input("x: T")
 //    .Attr("ksize: list(float)")
     .Attr("stride: list(float)")
 //    .Attr("bias: float")
     .Attr("T: realnumbertype = DT_FLOAT")
-    .Input("x: T")
 //    .Input("y: T")
     .Output("output: T")
    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
@@ -40,10 +40,10 @@ REGISTER_OP("MatrixAdd")
 
       // we can also use the Attr here
       std::vector<float> stride_;
-      c->GetAttr("stide", &stride_);
+      c->GetAttr("stride", &stride_);
 
-      c->Divide(H, 2, true, &H);
-      c->Divide(W, 2, true, &W);
+      c->Divide(H, stride_[0], false, &H);
+      c->Divide(W, stride_[1], false, &W);
 
       c->set_output(0, c->MakeShape({N, H, W, C}));
 
@@ -62,11 +62,29 @@ REGISTER_OP("MatrixAddGrad")
     .Input("gradients: T")
     .Output("grad_a: T")
     .Attr("T: realnumbertype")
+    .Attr("stride: list(float)")
     .SetShapeFn([](InferenceContext* c) {
+        // we require the input to have 4 axes
+        ShapeHandle shape_hnd;
+        TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &shape_hnd));
 
+        ShapeHandle x_shape = c->input(0);
+
+        // specify output-shape
+        // this could be "c->set_output(0, x_shape);"
+        // but we do it explicitly
+        auto N = c->Dim(c->input(0), 0);
+        auto H = c->Dim(c->input(0), 1);
+        auto W = c->Dim(c->input(0), 2);
+        auto C = c->Dim(c->input(0), 3);
+
+        // we can also use the Attr here
+        c->set_output(0, c->MakeShape({N, H, W, C}));
+
+        return Status::OK();
     //c->set_output(0, c->MakeShape({N, H, W, C}));
-    c->set_output(0, c->input(0));  // grad_a has same shape as x
-      return ::tensorflow::Status::OK();
+    //c->set_output(0, c->input(0));  // grad_a has same shape as x
+    //  return ::tensorflow::Status::OK();
     })
     .Doc(R"doc(
 Returns gradients of "x + y + bias".

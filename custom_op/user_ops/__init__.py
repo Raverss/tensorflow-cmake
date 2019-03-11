@@ -35,9 +35,10 @@ matrix_add, matrix_add_grad = load_op('matrix_add', has_grad=True)
 @ops.RegisterGradient("MatrixAdd")
 def _MatrixAddGrad(op, *grads):
 #  bias = op.get_attr('bias')
+  stride = op.get_attr('stride')
   matA = op.inputs[0]
 #  matB = op.inputs[1]
-  top = op.outputs[0]
+#  top = op.outputs[0]
   topdiff = grads[0]
 #  return matrix_add_grad(matA, matB, topdiff, bias=bias)
-  return matrix_add_grad(matA, topdiff)
+  return matrix_add_grad(x=matA, gradients=topdiff, stride=stride)

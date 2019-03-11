@@ -1,6 +1,9 @@
 import tensorflow as tf
 import numpy as np
+import os
 from user_ops import matrix_add
+
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 mnist = tf.keras.datasets.mnist
 
@@ -11,8 +14,9 @@ x_test = np.expand_dims(x_test, axis=3)
 
 input_ = tf.keras.layers.Input(shape=(28, 28, 1))
 x = tf.keras.layers.Conv2D(2, (3,3))(input_)
-#x = tf.keras.layers.Lambda(lambda x: tf.nn.max_pool(x, (1,2,2,1), (1,2,2,1), "SAME"))(x)
+#x = tf.keras.layers.Lambda(lambda x: tf.nn.avg_pool(x, (1,2,2,1), (1,2,2,1), "VALID"))(x)
 x = tf.keras.layers.Lambda(lambda x: matrix_add(x, (2,2)))(x)
+x = tf.keras.layers.Conv2D(2, (3,3))(x)
 x = tf.keras.layers.Flatten()(x)
 x = tf.keras.layers.Dense(10, activation=tf.nn.relu)(x)
 x = tf.keras.layers.Dropout(0.2)(x)
