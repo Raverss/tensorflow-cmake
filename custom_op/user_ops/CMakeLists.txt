@@ -24,4 +24,4 @@ include_directories(SYSTEM "kernels")
 include_directories(SYSTEM "/usr/local/")
 
 
-add_tensorflow_gpu_operation("matrix_add")
+add_tensorflow_gpu_operation("ft_pool")

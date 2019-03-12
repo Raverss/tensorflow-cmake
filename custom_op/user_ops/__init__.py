@@ -29,16 +29,12 @@ def load_op(name, has_grad=False):
     return getattr(_module, '%s' % name)
 
 
-matrix_add, matrix_add_grad = load_op('matrix_add', has_grad=True)
+ft_pool, ft_pool_grad = load_op('ft_pool', has_grad=True)
 
 
-@ops.RegisterGradient("MatrixAdd")
-def _MatrixAddGrad(op, *grads):
-#  bias = op.get_attr('bias')
+@ops.RegisterGradient("FtPool")
+def _FtPoolGrad(op, *grads):
   stride = op.get_attr('stride')
-  matA = op.inputs[0]
-#  matB = op.inputs[1]
-#  top = op.outputs[0]
-  topdiff = grads[0]
-#  return matrix_add_grad(matA, matB, topdiff, bias=bias)
-  return matrix_add_grad(x=matA, gradients=topdiff, stride=stride)
+  x = op.inputs[0]
+  grad_in = grads[0]
+  return ft_pool_grad(x=x, gradients=grad_in, stride=stride)
