@@ -24,7 +24,7 @@ for iteration in range(0, iterations):
     print("... starting {}-th iteration - ft pooling ...".format(iteration))
     input_ = tf.keras.layers.Input(shape=(28, 28, 1), name='input_layer')
     x = tf.keras.layers.Conv2D(2, (3,3), activation=tf.nn.relu, name='conv2D_1')(input_)
-    x = tf.keras.layers.Lambda(lambda x: ft_pool(x, (2.3,2.3), abc), name='lambda')(x)
+    x = tf.keras.layers.Lambda(lambda x: ft_pool(x, (1.4,1.4), abc), name='lambda')(x)
     x = tf.keras.layers.Conv2D(2, (3,3), activation=tf.nn.relu, name='conv2D_2')(x)
     x = tf.keras.layers.Flatten(name='flatten')(x)
     x = tf.keras.layers.Dense(10, activation=tf.nn.relu, name='dense_1')(x)
