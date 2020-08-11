@@ -35,6 +35,7 @@ ft_pool, ft_pool_grad = load_op('ft_pool', has_grad=True)
 @ops.RegisterGradient("FtPool")
 def _FtPoolGrad(op, *grads):
   stride = op.get_attr('stride')
+  pool_size = op.get_attr('pool_size')
   x = op.inputs[0]
   grad_in = grads[0]
-  return ft_pool_grad(x=x, gradients=grad_in, stride=stride)
+  return ft_pool_grad(x=x, gradients=grad_in, stride=stride, pool_size=pool_size)

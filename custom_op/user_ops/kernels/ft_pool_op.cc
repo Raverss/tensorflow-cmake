@@ -14,6 +14,7 @@ class FtPoolOp : public OpKernel {
  public:
   explicit FtPoolOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("stride", &stride));
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("pool_size", &pool_size));
   }
 
   void Compute(OpKernelContext* ctx) override {
@@ -32,12 +33,13 @@ class FtPoolOp : public OpKernel {
 
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
-    ::tensorflow::functor::FtPoolFunctor<Device, Dtype>::launch(ctx, input, output, stride);
+    ::tensorflow::functor::FtPoolFunctor<Device, Dtype>::launch(ctx, input, output, stride, pool_size);
   }
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(FtPoolOp);
   std::vector<float> stride;
+  std::vector<float> pool_size;
 };
 
 // Backward-Pass (CPU, GPU)
@@ -47,6 +49,7 @@ class FtPoolGradOp : public OpKernel {
  public:
   explicit FtPoolGradOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
         OP_REQUIRES_OK(ctx, ctx->GetAttr("stride", &stride));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("pool_size", &pool_size));
     }
 
   void Compute(OpKernelContext* ctx) override {
@@ -59,11 +62,12 @@ class FtPoolGradOp : public OpKernel {
 
     Tensor* grad_out = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, input.shape(), &grad_out));
-    ::tensorflow::functor::FtPoolGrad<Device, Dtype>::launch(ctx, grad_in, grad_out);
+    ::tensorflow::functor::FtPoolGrad<Device, Dtype>::launch(ctx, grad_in, grad_out, stride, pool_size);
   }
 
 private:
   std::vector<float> stride;
+  std::vector<float> pool_size;
 };
 
 #define REGISTER_CUSTOM_OP(NAME, DEVICE, T)                       \

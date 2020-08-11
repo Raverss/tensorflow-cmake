@@ -19,11 +19,11 @@ Status UnchangedShape(InferenceContext* c) {
 REGISTER_OP("FtPool")
 .Input("x: T")
 .Attr("stride: list(float)")
-.Attr("abc: float")
+.Attr("pool_size: list(float)")
 .Attr("T: realnumbertype = DT_FLOAT")
 .Output("output: T")
 .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
-    std::cout << "FtPool == Start..." << std::endl;
+    //std::cout << "FtPool == Start..." << std::endl;
     ShapeHandle shape_hnd;
     TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &shape_hnd));
     // save tensor shape into separated variables
@@ -35,14 +35,13 @@ REGISTER_OP("FtPool")
     std::vector<float> stride;
     c->GetAttr("stride", &stride);
     float abc;
-    c->GetAttr("abc", &abc);
-    std::cout << "abc is " << abc << std::endl;
-    std::cout << stride[0] << ", " << stride[1] << std::endl;
+    //std::cout << "abc is " << abc << std::endl;
+    //std::cout << stride[0] << ", " << stride[1] << std::endl;
     H = c->MakeDim(round(c->Value(H)/stride[0]));
     W = c->MakeDim(round(c->Value(W)/stride[1]));
 
     c->set_output(0, c->MakeShape({N, H, W, C}));
-    std::cout << "...FtPool == End" << std::endl << std::endl;
+    //std::cout << "...FtPool == End" << std::endl << std::endl;
     return Status::OK();
 })
 .Doc(R"doc(
@@ -55,8 +54,9 @@ REGISTER_OP("FtPoolGrad")
 .Output("grad_a: T")
 .Attr("T: realnumbertype")
 .Attr("stride: list(float)")
+.Attr("pool_size: list(float)")
 .SetShapeFn([](InferenceContext* c) {
-    std::cout << "FtPoolGrad == Start..." << std::endl;
+    //std::cout << "FtPoolGrad == Start..." << std::endl;
     // we require the input to have 4 axes
     ShapeHandle shape_hnd;
     TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &shape_hnd));
@@ -67,7 +67,7 @@ REGISTER_OP("FtPoolGrad")
     auto C = c->Dim(c->input(0), 3);
 
     c->set_output(0, c->MakeShape({N, H, W, C}));
-    std::cout << "...FtPoolGrad == End" << std::endl << std::endl;
+    //std::cout << "...FtPoolGrad == End" << std::endl << std::endl;
     return Status::OK();
 })
 .Doc(R"doc(

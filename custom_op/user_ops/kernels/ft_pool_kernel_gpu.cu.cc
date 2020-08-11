@@ -1,10 +1,10 @@
 // 2018, Patrick Wieschollek <mail@patwie.com>
 /*
-#if GOOGLE_CUDA
+#if 1 //GOOGLE_CUDA
 
 #define EIGEN_USE_GPU
 
-#include "matrix_add_op.h"
+#include "ft_pool_op.h"
 #include "tensorflow/core/util/cuda_kernel_helper.h"
 
 namespace tensorflow {
@@ -13,13 +13,14 @@ namespace {
 using CudaLaunchConfig = ::tensorflow::CudaLaunchConfig;
 
 template <typename T>
-__global__ void forward(CudaLaunchConfig cfg, T* __restrict__ Z, const int N,
-                        const T* __restrict__ X, const T* __restrict__ Y,
-                        const T bias) {
+__global__ void forward(const Tensor& input, Tensor* output) {
   // for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x
   // * gridDim.x) {
-  for (int i : CudaGridRangeX(cfg.virtual_thread_count)) {
-    Z[i] = X[i] + Y[i] + (T)bias;
+  //for (int i : CudaGridRangeX(cfg.virtual_thread_count)) {
+  //  Z[i] = X[i] + Y[i] + (T)bias;
+  const auto in_tensor = input.tensor<T, 4>();
+  auto out_tensor = output->tensor<T, 4>();
+  
   }
 }
 
@@ -41,17 +42,18 @@ namespace functor {
 
 template <typename Dtype>
 struct MatrixAddFunctor<GPUDevice, Dtype> {
-  static void launch(::tensorflow::OpKernelContext* context, const Tensor& mA_,
-                     const Tensor& mB_, Tensor* mC_, Dtype bias) {
-    const int N = mA_.NumElements();
+  static void launch(::tensorflow::OpKernelContext* context, const Tensor& input,
+                     Tensor* output, Dtype bias) {
+    //const int N = mA_.NumElements();
+    const int N = input.dim_size(0);
+    const int H = input.dim_size(1);
+    const int W = input.dim_size(2);
     const GPUDevice& d = context->eigen_gpu_device();
 
-    ::tensorflow::CudaLaunchConfig cfg =
-        ::tensorflow::GetCudaLaunchConfig(N, d);
+    ::tensorflow::Cuda3DLaunchConfig cfg =
+        ::tensorflow::GetCuda3DLaunchConfig(W, H, N, d);
 
-    forward<Dtype><<<cfg.block_count, cfg.thread_per_block, 0, d.stream()>>>(
-        cfg, mC_->flat<Dtype>().data(), mA_.NumElements(),
-        mA_.flat<Dtype>().data(), mB_.flat<Dtype>().data(), bias);
+    forward<Dtype><<<cfg.block_count, cfg.thread_per_block, 0, d.stream()>>>(input, output);
 
     if (!d.ok()) {
       context->SetStatus(
@@ -79,20 +81,20 @@ struct MatrixAddGrad<GPUDevice, Dtype> {
     // cudaMemset(grad_mA_->flat<Dtype>().data(), 0, N * sizeof(Dtype));
     // cudaMemset(grad_mB_->flat<Dtype>().data(), 0, N * sizeof(Dtype));
 
-    // backward<Dtype>
-    // <<< cfg.block_count, cfg.thread_per_block, 0,
-    // context->eigen_gpu_device().stream() >>> (
-    //   cfg,
-    //   topdiff_.flat<Dtype>().data(),
-    //   topdiff_.NumElements(),
-    //   grad_mA_->flat<Dtype>().data(),
-    //   grad_mB_->flat<Dtype>().data());
+     backward<Dtype>
+     <<< cfg.block_count, cfg.thread_per_block, 0,
+     context->eigen_gpu_device().stream() >>> (
+       cfg,
+       topdiff_.flat<Dtype>().data(),
+       topdiff_.NumElements(),
+       grad_mA_->flat<Dtype>().data(),
+       grad_mB_->flat<Dtype>().data());
 
     // faster alternative to custom kernel (above)
-    cudaMemcpy(grad_mA_->flat<Dtype>().data(), topdiff_.flat<Dtype>().data(),
-               N * sizeof(Dtype), cudaMemcpyDeviceToDevice);
-    cudaMemcpy(grad_mB_->flat<Dtype>().data(), topdiff_.flat<Dtype>().data(),
-               N * sizeof(Dtype), cudaMemcpyDeviceToDevice);
+    //cudaMemcpy(grad_mA_->flat<Dtype>().data(), topdiff_.flat<Dtype>().data(),
+    //           N * sizeof(Dtype), cudaMemcpyDeviceToDevice);
+    //cudaMemcpy(grad_mB_->flat<Dtype>().data(), topdiff_.flat<Dtype>().data(),
+    //           N * sizeof(Dtype), cudaMemcpyDeviceToDevice);
 
     if (!d.ok()) {
       context->SetStatus(tensorflow::errors::Internal(
@@ -108,4 +110,5 @@ template struct MatrixAddGrad<GPUDevice, double>;
 }  // namespace tensorflow
 
 #endif  // GOOGLE_CUDA
+
 */

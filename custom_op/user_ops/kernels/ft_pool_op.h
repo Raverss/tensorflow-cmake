@@ -14,13 +14,13 @@ namespace functor {
 
 template <typename Device, typename Dtype>
 struct FtPoolFunctor {
-    static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& input, Tensor* output, std::vector<float> stride_);
+    static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& input, Tensor* output, std::vector<float> stride_, std::vector<float> pool_size_);
 
 };
 
 template <typename Device, typename Dtype>
 struct FtPoolGrad {
-  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& gradients, Tensor* input);
+  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& gradients, Tensor* input, std::vector<float> stride_, std::vector<float> pool_size_);
 };
 
 }  // namespace functor
