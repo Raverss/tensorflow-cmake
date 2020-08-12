@@ -54,6 +54,11 @@ endif(WIN32)
 
 set(PYTHON_EXECUTABLE "python3" CACHE STRING "specify the python version TensorFlow is installed on.")
 
+# my modification
+if(WIN32)
+	set(PYTHON_EXECUTABLE "python")
+	message(STATUS "Using ${PYTHON_EXECUTABLE} to find tensorflow")
+endif(WIN32)
 
 if(TensorFlow_FOUND)
   # reuse cached variables

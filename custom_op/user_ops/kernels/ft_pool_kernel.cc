@@ -77,8 +77,7 @@ struct FtPoolFunctor<CPUDevice, Dtype> {
                                     //power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-w) / width_h)) / 2 );
                                     //power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-h) / height_h)) / 2 );
                                     //bf_value = power_x * power_y;
-                                    comp += in_tensor(n, static_cast<int>(y), static_cast<int>(x), c) * 
-                                    bf_values[(y-hh)*bf_arr_w + (x-ww)];
+                                    comp += in_tensor(n, static_cast<int>(y), static_cast<int>(x), c) * bf_values[(y-hh)*bf_arr_w + (x-ww)];
                                 }
                             }
                                 out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) = comp/bf_sum;
@@ -106,9 +105,9 @@ struct FtPoolGrad<CPUDevice, Dtype> {
         auto grad_out_tensor = grad_out->tensor<Dtype, 4>();
         grad_out_tensor.setZero();
         // sum_tensor is incialized to shape [H,W]
-        Tensor sum(DT_FLOAT, TensorShape({1, grad_out->dim_size(1), grad_out->dim_size(2), 1}));
-        auto sum_tensor = sum.tensor<Dtype, 4>();
-        sum_tensor.setZero();
+        //Tensor sum(DT_FLOAT, TensorShape({1, grad_out->dim_size(1), grad_out->dim_size(2), 1}));
+        //auto sum_tensor = sum.tensor<Dtype, 4>();
+        //sum_tensor.setZero();
         
         auto grad_in_tensor = grad_in.tensor<Dtype, 4>();
 
@@ -153,11 +152,11 @@ struct FtPoolGrad<CPUDevice, Dtype> {
                             power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-h) / height_h)) / 2 );
                             bf_value = power_x * power_y;
                             bf_values[(y-hh)*bf_arr_w + (x-ww)] = bf_value;
-                            //bf_sum  += bf_value;
-                            sum_tensor(0,y,x,0) += bf_value;
+                            bf_sum  += bf_value;
+                            //sum_tensor(0,y,x,0) += bf_value;
                         }
                     }
-                    //if (!bf_sum) bf_sum = 1.0;
+                    if (!bf_sum) bf_sum = 1.0;
                     /************ distribute gradient ***********/
                     //std::cout << "****************grad in[" << h << "," << w << "] distribution****************" << std::endl;
                     for (int n = 0; n < N; n++){
@@ -173,7 +172,7 @@ struct FtPoolGrad<CPUDevice, Dtype> {
                                     //if (!power_x || !power_y) continue;
                                     //bf_value = power_x * power_y;
                                     //std::cout << grad_out_tensor(n, y, x, c) << "+";
-                                    grad_out_tensor(n, y, x, c) += grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c) * bf_values[(y-hh)*bf_arr_w + (x-ww)];
+                                    grad_out_tensor(n, y, x, c) += (grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c) * bf_values[(y-hh)*bf_arr_w + (x-ww)]);
                                     //std::cout << grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c) << "*" << bf_values[(y-hh)*bf_arr_w + (x-ww)] << "=";
                                     //std::cout << grad_out_tensor(n, y, x, c) << "\t";
                                         //bf_values[yy + (x-ww)]) / bf_sum;
