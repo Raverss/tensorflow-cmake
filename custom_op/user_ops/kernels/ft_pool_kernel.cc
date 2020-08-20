@@ -19,45 +19,44 @@ struct FtPoolFunctor<CPUDevice, Dtype> {
         // [batch_size, height, width, channels]
         const int N = input.dim_size(0), H = input.dim_size(1), W = input.dim_size(2), C = input.dim_size(3);
 
-        double bf_sum = 0, power_x  = 0, power_y  = 0, bf_value, hh, ww;
+        double bf_sum = 0, comp = 0, power_x  = 0, power_y  = 0, bf_value, hh, ww;
         double width_h  = static_cast<double>(pool_size[1]) / 2.0;
         double height_h = static_cast<double>(pool_size[0]) / 2.0;
         double bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
         std::array<float, 100> bf_values;
 
         for (double h = 0; h < H; h += stride[0]){
-            hh = ceil(h-height_h);
+            hh = (int)h-height_h;
             for (double w = 0; w < W; w += stride[1]){
-                ww = ceil(w-width_h);
+                ww = (int)w-width_h;
                 if (round(w/stride[1]) < output->dim_size(2) && round(h/stride[0]) < output->dim_size(1)){
                     bf_sum = 0;
-                    for (double y=hh; y<=floor(h+height_h); y++){
+                    comp = 0;
+                    for (double y=hh; y<=(int)h+height_h; y++){
                         if (round(y) >= H) break;
                         if (round(y) < 0) continue;
-                        for (double x=ww; x<=floor(w+width_h); x++){
+                        for (double x=ww; x<=(int)w+width_h; x++){
                             if (round(x) >= W) break;
                             if (round(x) < 0) continue;
-                            power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-w) / width_h)) / 2 );
-                            power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-h) / height_h)) / 2 );
+                            power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-(int)w) / width_h)) / 2 );
+                            power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-(int)h) / height_h)) / 2 );
                             bf_value = power_x * power_y;
                             bf_sum  += bf_value;
                             bf_values[(y-hh)*bf_arr_w + (x-ww)] = bf_value;
                         }
                     }
-                    if(bf_sum > 0){
-                        for (int n = 0; n < N; n++){
-                            for (int c = 0; c < C; c++){
-                                for (double y=hh; y<=floor(h+height_h); y++){
-                                    if (round(y) >= H) break;
-                                    if (round(y) < 0) continue;
-                                    for (double x=ww; x<=floor(w+width_h); x++){
-                                        if (round(x) >= W) break;
-                                        if (round(x) < 0) continue;
-                                        out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) += bf_values[(y-hh)*bf_arr_w + (x-ww)] * in_tensor(n, round(y), round(x), c);
-                                    }
+                    for (int n = 0; n < N; n++){
+                        for (int c = 0; c < C; c++){
+                            for (double y=hh; y<=(int)h+height_h; y++){
+                                if (round(y) >= H) break;
+                                if (round(y) < 0) continue;
+                                for (double x=ww; x<=(int)w+width_h; x++){
+                                    if (round(x) >= W) break;
+                                    if (round(x) < 0) continue;
+                                    out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) += bf_values[(y-hh)*bf_arr_w + (x-ww)] * in_tensor(n, round(y), round(x), c);
                                 }
-                                out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) /= bf_sum;
                             }
+                            out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) /= bf_sum;
                         }
                     }
                 }
@@ -91,35 +90,33 @@ struct FtPoolGrad<CPUDevice, Dtype> {
         std::array<float, 100> bf_values;
         
         for (double h = 0; h < H; h += stride[0]){
-            hh = ceil(h-height_h);
+            hh = (int)h-height_h;
             for (double w = 0; w < W; w += stride[1]){
-                ww = ceil(w-width_h);
+                ww = (int)w-width_h;
                 if (round(w/stride[1]) < grad_in.dim_size(2) && round(h/stride[0]) < grad_in.dim_size(1)){
                     bf_sum = 0;
-                    for (double y=hh; y<=floor(h+height_h); y++){
+                    for (double y=hh; y<=(int)h+height_h; y++){
                         if (round(y) >= H) break;
                         if (round(y) < 0) continue;
-                        for (double x=ww; x<=floor(w+width_h); x++){
+                        for (double x=ww; x<=(int)w+width_h; x++){
                             if (round(x) >= W) break;
                             if (round(x) < 0) continue;
-                            power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-w) / width_h)) / 2 );
-                            power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-h) / height_h)) / 2 );
+                            power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-(int)w) / width_h)) / 2 );
+                            power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-(int)h) / height_h)) / 2 );
                             bf_value = power_x * power_y;
                             bf_sum  += bf_value;
                             bf_values[(y-hh)*bf_arr_w + (x-ww)] = bf_value;
                         }
                     }
-                    if(bf_sum > 0){
-                        for (int n = 0; n < N; n++){
-                            for (int c = 0; c < C; c++){
-                                for (double y=hh; y<=floor(h+height_h); y++){
-                                    if (round(y) >= H) break;
-                                    if (round(y) < 0) continue;
-                                    for (double x=ww; x<=floor(w+width_h); x++){
-                                        if (round(x) >= W) break;
-                                        if (round(x) < 0) continue;
-                                        grad_out_tensor(n, round(y), round(x), c) += bf_values[(y-hh)*bf_arr_w + (x-ww)] * grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c);
-                                    }
+                    for (int n = 0; n < N; n++){
+                        for (int c = 0; c < C; c++){
+                            for (double y=hh; y<=(int)h+height_h; y++){
+                                if (round(y) >= H) break;
+                                if (round(y) < 0) continue;
+                                for (double x=ww; x<=(int)w+width_h; x++){
+                                    if (round(x) >= W) break;
+                                    if (round(x) < 0) continue;
+                                    grad_out_tensor(n, round(y), round(x), c) += bf_values[(y-hh)*bf_arr_w + (x-ww)] * grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c);
                                 }
                             }
                         }
