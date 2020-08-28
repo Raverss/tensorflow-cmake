@@ -10,6 +10,9 @@
 namespace tensorflow {
 namespace functor {
 
+
+float absf(float a){return a<0 ? -a : a;}
+
 template <typename Dtype>
 struct FtPoolFunctor<CPUDevice, Dtype> {
     static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& input, Tensor* output, std::vector<float> stride, std::vector<float> pool_size) {
@@ -25,39 +28,42 @@ struct FtPoolFunctor<CPUDevice, Dtype> {
         double bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
         std::array<float, 100> bf_values;
 
+        int py, px;
+
         for (double h = 0; h < H; h += stride[0]){
-            hh = (int)h-height_h;
+            if (h/stride[0] >= output->dim_size(1)) continue;
             for (double w = 0; w < W; w += stride[1]){
-                ww = (int)w-width_h;
-                if (round(w/stride[1]) < output->dim_size(2) && round(h/stride[0]) < output->dim_size(1)){
-                    bf_sum = 0;
-                    comp = 0;
-                    for (double y=hh; y<=(int)h+height_h; y++){
-                        if (round(y) >= H) break;
-                        if (round(y) < 0) continue;
-                        for (double x=ww; x<=(int)w+width_h; x++){
-                            if (round(x) >= W) break;
-                            if (round(x) < 0) continue;
-                            power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-(int)w) / width_h)) / 2 );
-                            power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-(int)h) / height_h)) / 2 );
-                            bf_value = power_x * power_y;
-                            bf_sum  += bf_value;
-                            bf_values[(y-hh)*bf_arr_w + (x-ww)] = bf_value;
-                        }
+                if (w/stride[1] >= output->dim_size(2)) continue;
+                bf_sum = 0;
+                for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                    py = y<h ? ceil(y) : floor(y);
+                    if (py>=H || py<0)  continue;
+                    //power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(py-h) / height_h)) / 2 );
+                    power_y = 1.0 - static_cast<double>(absf(py-h) / height_h);
+                    for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                        px = x<w ? ceil(x) : floor(x);
+                        if (px>=W || px<0) continue;
+                        //power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(px-w) / width_h)) / 2 );
+                        power_x = 1.0 - static_cast<double>(absf(px-w) / width_h);
+                        bf_value = power_x * power_y;
+                        bf_sum  += bf_value;
+                        bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] = bf_value;
+                        //std::cout<<py<<"  "<<py-ceil(h-height_h)<<"  "<<px<<" "<<px-ceil(w-width_h)<<"\t"<<h<<"**"<<w<<"\t"<<y<<"/"<<x<<"\t"<<power_y<<" "<<power_x<<"\t"<<bf_value<<"\n";
                     }
-                    for (int n = 0; n < N; n++){
-                        for (int c = 0; c < C; c++){
-                            for (double y=hh; y<=(int)h+height_h; y++){
-                                if (round(y) >= H) break;
-                                if (round(y) < 0) continue;
-                                for (double x=ww; x<=(int)w+width_h; x++){
-                                    if (round(x) >= W) break;
-                                    if (round(x) < 0) continue;
-                                    out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) += bf_values[(y-hh)*bf_arr_w + (x-ww)] * in_tensor(n, round(y), round(x), c);
-                                }
+                }
+                //std::cout<<"xxxxxxxxxxxxxxxx\n";
+                for (int n = 0; n < N; n++){
+                    for (int c = 0; c < C; c++){
+                        for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                            py = y<h ? ceil(y) : floor(y);
+                            if (py>=H || py<0)  continue;
+                            for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                                px = x<w ? ceil(x) : floor(x);
+                                if (px>=W || px<0) continue;
+                                out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) += bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] * in_tensor(n, py, px, c);
                             }
-                            out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) /= bf_sum;
                         }
+                        out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) /= bf_sum;
                     }
                 }
             }
@@ -88,42 +94,46 @@ struct FtPoolGrad<CPUDevice, Dtype> {
         double height_h = static_cast<double>(pool_size[0]) / 2.0;
         const int bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
         std::array<float, 100> bf_values;
-        
+
+
+        int py, px;
+
         for (double h = 0; h < H; h += stride[0]){
-            hh = (int)h-height_h;
+            if (h/stride[0] >= grad_in.dim_size(1)) continue; //check if round here is necessary
             for (double w = 0; w < W; w += stride[1]){
-                ww = (int)w-width_h;
-                if (round(w/stride[1]) < grad_in.dim_size(2) && round(h/stride[0]) < grad_in.dim_size(1)){
-                    bf_sum = 0;
-                    for (double y=hh; y<=(int)h+height_h; y++){
-                        if (round(y) >= H) break;
-                        if (round(y) < 0) continue;
-                        for (double x=ww; x<=(int)w+width_h; x++){
-                            if (round(x) >= W) break;
-                            if (round(x) < 0) continue;
-                            power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(x-(int)w) / width_h)) / 2 );
-                            power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(std::abs(y-(int)h) / height_h)) / 2 );
-                            bf_value = power_x * power_y;
-                            bf_sum  += bf_value;
-                            bf_values[(y-hh)*bf_arr_w + (x-ww)] = bf_value;
-                        }
+                if (w/stride[1] >= grad_in.dim_size(2)) continue;
+                bf_sum = 0;
+                for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                    py = y<h ? ceil(y) : floor(y);
+                    if (py>=H || py<0)  continue;
+                    //power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(py-h) / height_h)) / 2 );
+                    power_y = 1.0 - static_cast<double>(absf(py-h) / height_h);
+                    for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                        px = x<w ? ceil(x) : floor(x);
+                        if (px>=W || px<0) continue;
+                        //power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(px-w) / width_h)) / 2 );
+                        power_x = 1.0 - static_cast<double>(absf(px-w) / width_h);
+                        bf_value = power_x * power_y;
+                        bf_sum  += bf_value;
+                        bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] = bf_value;
                     }
-                    for (int n = 0; n < N; n++){
-                        for (int c = 0; c < C; c++){
-                            for (double y=hh; y<=(int)h+height_h; y++){
-                                if (round(y) >= H) break;
-                                if (round(y) < 0) continue;
-                                for (double x=ww; x<=(int)w+width_h; x++){
-                                    if (round(x) >= W) break;
-                                    if (round(x) < 0) continue;
-                                    grad_out_tensor(n, round(y), round(x), c) += bf_values[(y-hh)*bf_arr_w + (x-ww)] * grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c);
-                                }
+                }
+                for (int n = 0; n < N; n++){
+                    for (int c = 0; c < C; c++){
+                        for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                            py = y<h ? ceil(y) : floor(y);
+                            if (py>=H || py<0)  continue;
+                            for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                                px = x<w ? ceil(x) : floor(x);
+                                if (px>=W || px<0) continue;
+                                grad_out_tensor(n, py, px, c) += bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] * grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c);
                             }
                         }
                     }
                 }
             }
         }
+
     }
 };
  
