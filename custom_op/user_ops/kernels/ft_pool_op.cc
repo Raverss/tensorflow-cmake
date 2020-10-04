@@ -82,4 +82,9 @@ REGISTER_CUSTOM_OP(FtPool, CPU, double);
 REGISTER_CUSTOM_OP(FtPoolGrad, CPU, float);
 REGISTER_CUSTOM_OP(FtPoolGrad, CPU, double);
 
+REGISTER_CUSTOM_OP(FtPool, GPU, float);
+REGISTER_CUSTOM_OP(FtPool, GPU, double);
+REGISTER_CUSTOM_OP(FtPoolGrad, GPU, float);
+REGISTER_CUSTOM_OP(FtPoolGrad, GPU, double);
+
 }  // namespace tensorflow

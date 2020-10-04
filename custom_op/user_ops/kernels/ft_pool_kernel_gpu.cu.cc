@@ -1,114 +1,217 @@
-// 2018, Patrick Wieschollek <mail@patwie.com>
-/*
-#if 1 //GOOGLE_CUDA
+#if GOOGLE_CUDA
 
 #define EIGEN_USE_GPU
 
+#include <cstring>
+
 #include "ft_pool_op.h"
+#include "tensorflow/core/framework/op.h"
+#include <omp.h>
+#include <cmath>
 #include "tensorflow/core/util/cuda_kernel_helper.h"
 
 namespace tensorflow {
 namespace {
-
 using CudaLaunchConfig = ::tensorflow::CudaLaunchConfig;
 
+float absf(float a){return a<0 ? -a : a;}
+
 template <typename T>
-__global__ void forward(const Tensor& input, Tensor* output) {
-  // for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x
-  // * gridDim.x) {
-  //for (int i : CudaGridRangeX(cfg.virtual_thread_count)) {
-  //  Z[i] = X[i] + Y[i] + (T)bias;
+__global__ void forward(CudaLaunchConfig cfg,
+                        const Tensor& input,
+                        Tensor* output,
+                        //T*  out_tensor,
+                        //const T&  in_tensor,
+                        std::vector<float> stride,
+                        std::vector<float> pool_size) {
+
   const auto in_tensor = input.tensor<T, 4>();
   auto out_tensor = output->tensor<T, 4>();
-  
+  out_tensor.setZero();
+
+  for (int i : CudaGridRangeX(cfg.virtual_thread_count)) {
+    // [batch_size, height, width, channels]
+    const int N = input.dim_size(0), H = input.dim_size(1), W = input.dim_size(2), C = input.dim_size(3);
+
+    double bf_sum = 0, comp = 0, power_x  = 0, power_y  = 0, bf_value, hh, ww;
+    double width_h  = static_cast<double>(pool_size[1]) / 2.0;
+    double height_h = static_cast<double>(pool_size[0]) / 2.0;
+    double bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
+    std::array<float, 100> bf_values;
+
+    int py, px;
+
+    for (double h = 0; h < H; h += stride[0]){
+        if (h/stride[0] >= output->dim_size(1)) continue;
+        for (double w = 0; w < W; w += stride[1]){
+            if (w/stride[1] >= output->dim_size(2)) continue;
+            bf_sum = 0;
+            for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                py = y<h ? ceil(y) : floor(y);
+                if (py>=H || py<0)  continue;
+                //power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(py-h) / height_h)) / 2 );
+                power_y = 1.0 - static_cast<double>(absf(py-h) / height_h);
+                for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                    px = x<w ? ceil(x) : floor(x);
+                    if (px>=W || px<0) continue;
+                    //power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(px-w) / width_h)) / 2 );
+                    power_x = 1.0 - static_cast<double>(absf(px-w) / width_h);
+                    bf_value = power_x * power_y;
+                    bf_sum  += bf_value;
+                    bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] = bf_value;
+                    //std::cout<<py<<"  "<<py-ceil(h-height_h)<<"  "<<px<<" "<<px-ceil(w-width_h)<<"\t"<<h<<"**"<<w<<"\t"<<y<<"/"<<x<<"\t"<<power_y<<" "<<power_x<<"\t"<<bf_value<<"\n";
+                }
+            }
+            //std::cout<<"xxxxxxxxxxxxxxxx\n";
+            for (int n = 0; n < N; n++){
+                for (int c = 0; c < C; c++){
+                    for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                        py = y<h ? ceil(y) : floor(y);
+                        if (py>=H || py<0)  continue;
+                        for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                            px = x<w ? ceil(x) : floor(x);
+                            if (px>=W || px<0) continue;
+                            out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) += bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] * in_tensor(n, py, px, c);
+                        }
+                    }
+                    out_tensor(n, round(h/stride[0]), round(w/stride[1]), c) /= bf_sum;
+                }
+            }
+        }
+    }
   }
 }
 
 template <typename T>
-__global__ void backward(CudaLaunchConfig cfg, const T* __restrict__ top_diff,
-                         const int N, T* __restrict__ grad_matrixA,
-                         T* __restrict__ grad_matrixB) {
-  // for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < N; i += blockDim.x
-  // * gridDim.x) {
+__global__ void backward(CudaLaunchConfig cfg,
+                         const Tensor&  grad_in,
+                         Tensor* grad_out,
+                         std::vector<float> stride,
+                         std::vector<float> pool_size) {
+
   for (int i : CudaGridRangeX(cfg.virtual_thread_count)) {
-    grad_matrixA[i] = top_diff[i];
-    grad_matrixB[i] = top_diff[i];
-  }
-}
+    auto grad_out_tensor = grad_out->tensor<T, 4>();
+    grad_out_tensor.setZero();
+    // sum_tensor is incialized to shape [H,W]
+    Tensor sum(DT_FLOAT, TensorShape({1, grad_out->dim_size(1), grad_out->dim_size(2), 1}));
+    auto sum_tensor = sum.tensor<T, 4>();
+    sum_tensor.setZero();
 
-}  // anonymous namespace
+    auto grad_in_tensor = grad_in.tensor<T, 4>();
 
-namespace functor {
+    const int N = grad_out->dim_size(0), H = grad_out->dim_size(1), W = grad_out->dim_size(2), C = grad_out->dim_size(3);
+    double bf_sum = 0, power_x, power_y, bf_value, hh, ww;
+    double width_h  = static_cast<double>(pool_size[1]) / 2.0;
+    double height_h = static_cast<double>(pool_size[0]) / 2.0;
+    const int bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
+    std::array<float, 100> bf_values;
 
-template <typename Dtype>
-struct MatrixAddFunctor<GPUDevice, Dtype> {
-  static void launch(::tensorflow::OpKernelContext* context, const Tensor& input,
-                     Tensor* output, Dtype bias) {
-    //const int N = mA_.NumElements();
-    const int N = input.dim_size(0);
-    const int H = input.dim_size(1);
-    const int W = input.dim_size(2);
-    const GPUDevice& d = context->eigen_gpu_device();
 
-    ::tensorflow::Cuda3DLaunchConfig cfg =
-        ::tensorflow::GetCuda3DLaunchConfig(W, H, N, d);
+    int py, px;
 
-    forward<Dtype><<<cfg.block_count, cfg.thread_per_block, 0, d.stream()>>>(input, output);
-
-    if (!d.ok()) {
-      context->SetStatus(
-          tensorflow::errors::Internal("Failed launching MatrixAdd on GPU"));
+    for (double h = 0; h < H; h += stride[0]){
+        if (h/stride[0] >= grad_in.dim_size(1)) continue; //check if round here is necessary
+        for (double w = 0; w < W; w += stride[1]){
+            if (w/stride[1] >= grad_in.dim_size(2)) continue;
+            bf_sum = 0;
+            for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                py = y<h ? ceil(y) : floor(y);
+                if (py>=H || py<0)  continue;
+                //power_y = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(py-h) / height_h)) / 2 );
+                power_y = 1.0 - static_cast<double>(absf(py-h) / height_h);
+                for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                    px = x<w ? ceil(x) : floor(x);
+                    if (px>=W || px<0) continue;
+                    //power_x = sin( 3.14*static_cast<double>(1.0 - static_cast<double>(absf(px-w) / width_h)) / 2 );
+                    power_x = 1.0 - static_cast<double>(absf(px-w) / width_h);
+                    bf_value = power_x * power_y;
+                    bf_sum  += bf_value;
+                    bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] = bf_value;
+                }
+            }
+            for (int n = 0; n < N; n++){
+                for (int c = 0; c < C; c++){
+                    for (double y=ceil(h-height_h); y<=h+height_h; y++){
+                        py = y<h ? ceil(y) : floor(y);
+                        if (py>=H || py<0)  continue;
+                        for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                            px = x<w ? ceil(x) : floor(x);
+                            if (px>=W || px<0) continue;
+                            grad_out_tensor(n, py, px, c) += bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] * grad_in_tensor(n, round(h/stride[0]), round(w/stride[1]), c);
+                        }
+                    }
+                }
+            }
+        }
     }
   }
-};
+}
+}//anonymous namespace
 
-template struct MatrixAddFunctor<GPUDevice, int>;
-template struct MatrixAddFunctor<GPUDevice, float>;
-template struct MatrixAddFunctor<GPUDevice, double>;
+namespace functor {
+float absf(float a){return a<0 ? -a : a;}
 
 template <typename Dtype>
-struct MatrixAddGrad<GPUDevice, Dtype> {
-  static void launch(::tensorflow::OpKernelContext* context,
-                     const Tensor& topdiff_, Tensor* grad_mA_,
-                     Tensor* grad_mB_) {
-    const int N = topdiff_.NumElements();
-    const GPUDevice& d = context->eigen_gpu_device();
+struct FtPoolFunctor<GPUDevice, Dtype> {
+  static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& input,
+                     Tensor* output, std::vector<float> stride, std::vector<float> pool_size) {
+    const int N = input.NumElements();
+    const GPUDevice& d = ctx->eigen_gpu_device();
 
     ::tensorflow::CudaLaunchConfig cfg =
         ::tensorflow::GetCudaLaunchConfig(N, d);
 
-    // // optional reset gradients before running a kernel
-    // cudaMemset(grad_mA_->flat<Dtype>().data(), 0, N * sizeof(Dtype));
-    // cudaMemset(grad_mB_->flat<Dtype>().data(), 0, N * sizeof(Dtype));
 
-     backward<Dtype>
-     <<< cfg.block_count, cfg.thread_per_block, 0,
-     context->eigen_gpu_device().stream() >>> (
-       cfg,
-       topdiff_.flat<Dtype>().data(),
-       topdiff_.NumElements(),
-       grad_mA_->flat<Dtype>().data(),
-       grad_mB_->flat<Dtype>().data());
-
-    // faster alternative to custom kernel (above)
-    //cudaMemcpy(grad_mA_->flat<Dtype>().data(), topdiff_.flat<Dtype>().data(),
-    //           N * sizeof(Dtype), cudaMemcpyDeviceToDevice);
-    //cudaMemcpy(grad_mB_->flat<Dtype>().data(), topdiff_.flat<Dtype>().data(),
-    //           N * sizeof(Dtype), cudaMemcpyDeviceToDevice);
+    forward<Dtype><<<cfg.block_count, cfg.thread_per_block, 0, d.stream()>>>(
+        cfg,
+        input,
+        output,
+        stride,
+        pool_size);
 
     if (!d.ok()) {
-      context->SetStatus(tensorflow::errors::Internal(
-          "Failed launching MatrixAddGrad on GPU"));
+      ctx->SetStatus(
+          tensorflow::errors::Internal("Failed launching FtPool on GPU"));
     }
   }
 };
 
-template struct MatrixAddGrad<GPUDevice, float>;
-template struct MatrixAddGrad<GPUDevice, double>;
+//template struct FtPoolFunctor<GPUDevice, int32>;
+//template struct FtPoolFunctor<GPUDevice, uint32>;
+//template struct FtPoolFunctor<GPUDevice, float>;
+//template struct FtPoolFunctor<GPUDevice, double>;
+
+template <typename Dtype>
+struct FtPoolGrad<GPUDevice, Dtype> {
+  static void launch(::tensorflow::OpKernelContext* ctx,
+                     const Tensor& grad_in,
+                     Tensor* grad_out,
+                     std::vector<float> stride,
+                     std::vector<float> pool_size) {
+    const int N = grad_in.NumElements();
+    const GPUDevice& d = ctx->eigen_gpu_device();
+
+    ::tensorflow::CudaLaunchConfig cfg =
+        ::tensorflow::GetCudaLaunchConfig(N, d);
+
+    backward<Dtype><<< cfg.block_count, cfg.thread_per_block, 0, ctx->eigen_gpu_device().stream() >>> (
+      cfg,
+      grad_in,
+      grad_out,
+      stride,
+      pool_size);
+
+    if (!d.ok()) {
+      ctx->SetStatus(tensorflow::errors::Internal(
+          "Failed launching FtPoolGrad on GPU"));
+    }
+  }
+};
+
+//template struct FtPoolGrad<GPUDevice, float>;
+//template struct FtPoolGrad<GPUDevice, double>;
 
 }  // namespace functor
 }  // namespace tensorflow
 
 #endif  // GOOGLE_CUDA
-
-*/

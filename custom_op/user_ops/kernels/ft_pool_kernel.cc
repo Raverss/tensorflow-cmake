@@ -78,7 +78,11 @@ template struct FtPoolFunctor<CPUDevice, double>;
 
 template <typename Dtype>
 struct FtPoolGrad<CPUDevice, Dtype> {
-    static void launch(::tensorflow::OpKernelContext* ctx, const Tensor& grad_in, Tensor* grad_out, std::vector<float> stride, std::vector<float> pool_size) {
+    static void launch(::tensorflow::OpKernelContext* ctx,
+                       const Tensor& grad_in,
+                       Tensor* grad_out,
+                       std::vector<float> stride,
+                       std::vector<float> pool_size) {
         auto grad_out_tensor = grad_out->tensor<Dtype, 4>();
         grad_out_tensor.setZero();
         // sum_tensor is incialized to shape [H,W]
