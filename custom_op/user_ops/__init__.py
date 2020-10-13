@@ -9,11 +9,9 @@ __all__ = []
 
 def load_op(name, has_grad=False):
   """Load operation and add it to __all__ for imports.
-
   Args:
       name (str): name of operation without "_op" suffix
       has_grad (bool, optional): gradient (if exists) should be loaded as well
-
   Returns:
       functions
   """

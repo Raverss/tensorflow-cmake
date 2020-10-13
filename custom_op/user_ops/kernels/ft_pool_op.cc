@@ -75,8 +75,6 @@ private:
       Name(#NAME).Device(DEVICE_##DEVICE).TypeConstraint<T>("T"), \
       NAME##Op<DEVICE##Device, T>)
 
-REGISTER_CUSTOM_OP(FtPool, CPU, uint32);
-REGISTER_CUSTOM_OP(FtPool, CPU, int32);
 REGISTER_CUSTOM_OP(FtPool, CPU, float);
 REGISTER_CUSTOM_OP(FtPool, CPU, double);
 REGISTER_CUSTOM_OP(FtPoolGrad, CPU, float);
