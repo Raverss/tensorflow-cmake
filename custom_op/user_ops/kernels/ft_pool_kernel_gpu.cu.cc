@@ -30,10 +30,9 @@ __global__ void forward(CudaLaunchConfig cfg,
                         const int Nx,
                         const int H,
                         const int W,
-                        const int C,
-                        int *bf_values
+                        const int C
+                        //int *bf_values
                         ) {
-
 
 //  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < cfg.virtual_thread_count; i += blockDim.x* gridDim.x) {
   // naalokuju si sdilenou memory
@@ -55,7 +54,7 @@ __global__ void forward(CudaLaunchConfig cfg,
     double height_h = static_cast<double>(pool_size0) / 2.0;
     double bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
     //std::array<float, 100> bf_values;
-
+    float* bf_values = new float[100];
 
     int py, px;
     //int current_W = i / W;
@@ -63,10 +62,10 @@ __global__ void forward(CudaLaunchConfig cfg,
     //int max_W = current_W + min_W;
     //int max_H = current_H + min_H;
 
-    double w = (double)(blockIdx.x * blockDim.x + threadIdx.x);
-    double h = (double)(blockIdx.y * blockDim.y + threadIdx.y);
+    double w = (double)(blockIdx.x * blockDim.x + threadIdx.x) * stride1;
+    double h = (double)(blockIdx.y * blockDim.y + threadIdx.y) * stride0;
 
-    //printf("starting W %f, H %f \n", w, h);
+    printf("Kernel starting W %f, H %f \n", w, h);
     //printf("blockIdx.y=%d blockDim.y=%d  threadIdx.y=%d H=%f \n", blockIdx.y, blockDim.y, threadIdx.y, h);
 
 
@@ -79,7 +78,6 @@ __global__ void forward(CudaLaunchConfig cfg,
 
     //printf("threadIdx %d", threadIdx.x);
     //printf("threadIdx %d", threadIdx.y);
-
 
     if (w < W && h < H) {
     //for (double h = blockIdx.x * blockDim.x + threadIdx.x; h < H; h += stride0){
@@ -101,11 +99,15 @@ __global__ void forward(CudaLaunchConfig cfg,
                     bf_sum  += bf_value;
                     int bf_index = static_cast<int>(py - ceil(h-height_h))*bf_arr_w + (px - ceil(w-width_h));
                     bf_values[bf_index] = bf_value;
+                    if (w == 24 && h == 24) printf("bfvalue: %f, index: %d, bf_values[bf_index]: %f \n", bf_value, bf_index, bf_values[bf_index]);
+
                     //
                     //bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] = bf_value;
                     //std::cout<<py<<"  "<<py-ceil(h-height_h)<<"  "<<px<<" "<<px-ceil(w-width_h)<<"\t"<<h<<"**"<<w<<"\t"<<y<<"/"<<x<<"\t"<<power_y<<" "<<power_x<<"\t"<<bf_value<<"\n";
                 }
             }
+
+
             //std::cout<<"xxxxxxxxxxxxxxxx\n";
             for (int n = 0; n < Nx; n++){
                 for (int c = 0; c < C; c++){
@@ -116,22 +118,23 @@ __global__ void forward(CudaLaunchConfig cfg,
                             px = x<w ? ceil(x) : floor(x);
                             if (px>=W || px<0) continue;
                             int bf_index = static_cast<int>(py - ceil(h-height_h))*bf_arr_w + (px - ceil(w-width_h));
-                            int out_tensor_index = static_cast<int>(n+(((int)round(h/stride0))*(int)round(w/stride0)) + c);
-                            int in_tensor_index = static_cast<int>(n + (py * px) + c);
-                            __syncthreads();
+                            int in_tensor_index = static_cast<int>(n * H * W * C + py * W * C + px * C +c );
+                            int out_tensor_index = static_cast<int>(n * (int)(H/stride0) * (int)(W/stride1) * C + (int)round(h/stride0) * (int)(W/stride1) * C + (int)round(w/stride1) * C + c);
+                            //printf("out_tensor_index %d in_tensor_index %d \n", out_tensor_index, in_tensor_index);
                             out_tensor[out_tensor_index] += bf_values[bf_index] * in_tensor[in_tensor_index];
+                            if (w == 24 && h == 24) printf("bfvalue: %f, in_tensor[in_tensor_index]: %f, index: %d\n", bf_values[bf_index], in_tensor[in_tensor_index], bf_index);
+
                             //out_tensor(n, (int)round(h/stride0), (int)round(w/stride0), c) += bf_values[(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h))] * in_tensor(n, py, px, c);
                         }
                     }
-                    int out_tensor_index = static_cast<int>(n+(((int)round(h/stride0))*(int)round(w/stride1)) + c);
-                    __syncthreads();
-                    //out_tensor(n, (int)round(h/stride0), (int)round(w/stride1), c) /= bf_sum;
+                    int out_tensor_index = static_cast<int>(n * (int)(H/stride0) * (int)(W/stride1) * C + (int)round(h/stride0) * (int)(W/stride1) * C + (int)round(w/stride1) * C + c);
                     out_tensor[out_tensor_index] /= bf_sum;
                 }
             }
         //}
 
-        //printf("END W %f, H %f \n", w, h);
+        //printf("Kernel END W %f, H %f \n", w, h);
+        delete bf_values;
     }
   //}
 }
@@ -239,14 +242,19 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
 
     // podle toho zjistit kolik potrebuju oken = kolik potrebuju threadu
     const int Nx = input.dim_size(0), H = input.dim_size(1), W = input.dim_size(2), C = input.dim_size(3);
+    printf("Nx %d H %d W %d C %d \n", Nx, H, W, C);
+
+    const int Nxoutput = output->dim_size(0), Houtput = output->dim_size(1), Woutput = output->dim_size(2), Coutput = output->dim_size(3);
+    printf("Nx %d H %d W %d C %d \n", Nxoutput, Houtput, Woutput, Coutput);
+
     const float stride0 = stride[0];
     const float stride1 = stride[1];
     const float pool_size0 = pool_size[0];
     const float pool_size1 = pool_size[1];
 
-    int pool_w, pool_h;
-    pool_h = (int)(H / stride[0]);
-    pool_w = (int)(W / stride[1]);
+    float pool_w, pool_h;
+    pool_h = (H / stride[0]);
+    pool_w = (W / stride[1]);
 
     //const int N = input.NumElements(); // (H/stride) * (W/stride)
     const int N = (int)(pool_h / pool_w);
@@ -263,10 +271,10 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
     //dim3 dimGrid(B.width / dimBlock.x, A.height / dimBlock.y);
     //forward<Dtype><<<(int)(pool_h / pool_w), 1, 0, d.stream()>>>(
     dim3 dimBlock(10, 10);
-    dim3 dimGrid((int)(pool_w / dimBlock.x), (int)(pool_h / dimBlock.y));
+    dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
 
-    //printf("END pool_h %d, pool_w %d \n", pool_h, pool_w);
-    //printf("END dimGrid.x %d, dimGrid.y %d , dimGrid.z %d\n", dimGrid.x, dimGrid.y, dimGrid.z);
+    printf("lunch pool_h %d, pool_w %d \n", pool_h, pool_w);
+    printf("lunch dimGrid.x %d, dimGrid.y %d , dimGrid.z %d\n", dimGrid.x, dimGrid.y, dimGrid.z);
 
 
     forward<Dtype><<<dimGrid, dimBlock, 0, d.stream()>>>(
@@ -281,8 +289,7 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
         Nx,
         H,
         W,
-        C,
-        d_a
+        C
         );
 
     //cudaDeviceSynchronize();
@@ -335,8 +342,11 @@ struct FtPoolGrad<GPUDevice, Dtype> {
     ::tensorflow::CudaLaunchConfig cfg =
         ::tensorflow::GetCudaLaunchConfig(8, d);
 
-    dim3 dimBlock(5, 5);
+    dim3 dimBlock(10, 10);
     dim3 dimGrid((int)(pool_w / dimBlock.x), (int)(pool_h / dimBlock.y));
+
+    printf("lunch pool_h %d, pool_w %d \n", pool_h, pool_w);
+    printf("lunch dimGrid.x %d, dimGrid.y %d , dimGrid.z %d\n", dimGrid.x, dimGrid.y, dimGrid.z);
 
     backward<Dtype><<<dimGrid, dimBlock, 0, ctx->eigen_gpu_device().stream() >>> (
       cfg,
