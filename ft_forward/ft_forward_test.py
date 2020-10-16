@@ -23,10 +23,10 @@ EXP_M = np.asarray(
 
 # Failed output
 EXP_M_F = np.asarray(
-    [[0.666333, 1.1,        3.3,       4.3],
-     [1.8332,   3.,         4.5,       6.],
-     [3.3332,   4.5,        6.,        7.5],
-     [4.3,      6.,         7.5,       9.]], dtype=np.float32)
+    [[0.66, 1.1, 3.3, 4.3],
+     [1.83, 3.,  4.5, 6.],
+     [3.33, 4.5, 6.,  7.5],
+     [4.3,  6.,  7.5, 9.]], dtype=np.float32)
 
 STRIDE = [1.5, 1.5]
 POOL_SIZE = [3.0, 3.0]
@@ -36,7 +36,7 @@ def matrix_diff(out_m, exp_m):
         >>> matrix_diff(EXP_M, EXP_M)
         0.0
         >>> matrix_diff(EXP_M, EXP_M_F)
-        1.8331163
+        1.8458494
     """
     diff = np.abs(out_m - exp_m)
     return np.sum(diff)
@@ -54,12 +54,11 @@ def nn_predict():
 def nn_predict_test(exp):
     """
         >>> nn_predict_test(EXP_M)
-        True
-        >>> nn_predict_test(EXP_M_F)
-        False
+        0.0
     """
     out = nn_predict()
-    return matrix_diff(out, exp) == 0.0
+    diff = matrix_diff(out, exp)
+    return diff
 
 
 if __name__ == '__main__':
