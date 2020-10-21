@@ -35,7 +35,7 @@ __global__ void forward(CudaLaunchConfig cfg,
     //printf("--- Starting forward \n");
     double w = (double)(blockIdx.x * blockDim.x + threadIdx.x) * stride1;
     double h = (double)(blockIdx.y * blockDim.y + threadIdx.y) * stride0;
-    prinf("Launch forward inverse")
+    printf("Launch forward inverse");
 
     if (w < W && h < H) {
         double bf_sum = 0, power_x, power_y, bf_value;
@@ -92,7 +92,7 @@ __global__ void backward(CudaLaunchConfig cfg,
                         const int C,
                         const int mem_init
                          ) {
-    prinf("Launch backward inverse")
+    printf("Launch backward inverse");
     double w = (double)(blockIdx.x * blockDim.x + threadIdx.x) * stride1;
     double h = (double)(blockIdx.y * blockDim.y + threadIdx.y) * stride0;
 

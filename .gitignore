@@ -144,24 +144,19 @@ build
 *.out
 *.app
 
-inference/exported/*
-inference/!exported/.gitkeep
-inference/cc/inference_cc
-inference/go/inference_go
-inference/c/inference_c
-inference/tensorflow_config.txt
-example/tensorflow
-example/example
-example/tensorflow_config.txt
-
-examples/simple/tensorflow
-examples/resize/tensorflow
+inference
+example
 tensorflow_config.txt
-examples/keras/exported
-examples/keras/inference_cc
-examples/resize/opencv_version
-examples/resize/tensorflow_version
-examples/simple/example
+
 
 serving/image/client/*.png
 
+*.log
+
+ft_forward/basic_function_example.ods
+
+*.pkl
+
+# build dirs
+ft_forward/user_ops/ft_pool_op.dir
+ft_forward/user_ops/ft_pool_op_cu.dir

@@ -1,6 +1,7 @@
-#if GOOGLE_CUDA
+//#if GOOGLE_CUDA
 
 #define EIGEN_USE_GPU
+#define DEBUG_PRINT false
 
 #include <cstring>
 #include "ft_pool_op.h"
@@ -11,6 +12,10 @@
 #include "tensorflow/core/util/cuda_kernel_helper.h"
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+//for prining purposes
+#include <iostream>
+#include <fstream>
+#include <iomanip>
 
 namespace tensorflow {
 namespace {
@@ -34,16 +39,13 @@ __global__ void forward(CudaLaunchConfig cfg,
                         ) {
     double w = (double)(blockIdx.x * blockDim.x + threadIdx.x) * stride1;
     double h = (double)(blockIdx.y * blockDim.y + threadIdx.y) * stride0;
-
+    int ww = 2, hh = 2;
     if (w < W && h < H) {
         double bf_sum = 0, power_x = 0, power_y = 0, bf_value;
         double width_h  = static_cast<double>(pool_size1) / 2.0;
         double height_h = static_cast<double>(pool_size0) / 2.0;
         double bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
-        //float *bf_values = new float[mem_init]; TODO: need fix
-        //float bf_values[49]; //mem_init
-        int npp = mem_init;    // n_poly = 150
-        float* bf_values =  new float[npp];
+        float bf_values[25]; //mem_init
         int py, px;
         bf_sum = 0;
         for (double y=ceil(h-height_h); y<=h+height_h; y++){
@@ -64,6 +66,7 @@ __global__ void forward(CudaLaunchConfig cfg,
             for (int c = 0; c < C; c++){
                 int out_tensor_index = static_cast<int>(n * (int)round(H/stride0) * (int)round(W/stride1) * C + (int)round(h/stride0) * (int)round(W/stride1) * C + (int)round(w/stride1) * C + c);
                 out_tensor[out_tensor_index] = 0;
+                //printf("w: %f, h: %f, out_tensor_index: %d, H/stride0: %d, W/stride1 %d \n", w, h, out_tensor_index, (int)round(h/stride0), (int)round(w/stride1));
                 for (double y=ceil(h-height_h); y<=h+height_h; y++){
                     py = y<h ? ceil(y) : floor(y);
                     if (py>=H || py<0)  continue;
@@ -72,10 +75,16 @@ __global__ void forward(CudaLaunchConfig cfg,
                         if (px>=W || px<0) continue;
                         int bf_index = static_cast<int>(py - ceil(h-height_h))*bf_arr_w + (px - ceil(w-width_h));
                         int in_tensor_index = static_cast<int>(n * H * W * C + py * W * C + px * C +c );
+                        //if (w == 4.5 && h == 4.5) printf("py: %d px: %d in_tensor[in_tensor_index]: %f bf_values[bf_index]: %f , in_tensor_index: %d \n", py, px, in_tensor[in_tensor_index], bf_values[bf_index], in_tensor_index);
+                        if(w/stride1 == ww && h/stride0 == hh && DEBUG_PRINT) printf("[y:%d,x:%d] %3.3f * %3.3f\t", py, px, bf_values[bf_index], in_tensor[in_tensor_index]);
                         out_tensor[out_tensor_index] += in_tensor[in_tensor_index] * bf_values[bf_index];
                     }
+                    //if((int)round(w/stride1) == ww && (int)round(h/stride0) == hh && DEBUG_PRINT) printf("\n");
                 }
+                //if(isnan(out_tensor[out_tensor_index])) printf("nan pred!\n");
                 out_tensor[out_tensor_index] /= bf_sum;
+                //if(isnan(out_tensor[out_tensor_index])) printf("nan po!\n");
+                //if((int)round(w/stride1) == ww && (int)round(h/stride0) == hh && DEBUG_PRINT) printf("comp pos in img:[%3.2f,%3.2f]: %3.3f\n",h,w, out_tensor[out_tensor_index]);
             }
         }
         delete[] bf_values;
@@ -105,19 +114,20 @@ __global__ void backward(CudaLaunchConfig cfg,
                          const int C,
                          const int mem_init
                          ) {
+    int ww = 2, hh = 2;
     double w = (double)(blockIdx.x * blockDim.x + threadIdx.x) * stride1;
     double h = (double)(blockIdx.y * blockDim.y + threadIdx.y) * stride0;
+    int pocitadlo = 0;
+    //printf("w=%f h=%f \n",w,h);
 
     if (w < W && h < H) {
+        if((int)round(w/stride1) == ww && (int)round(h/stride0) == hh && DEBUG_PRINT) printf("grad pos in img:[%3.2f,%3.2f]\n",h,w);
         double bf_sum = 0, power_x, power_y, bf_value;
         double width_h  = static_cast<double>(pool_size1) / 2.0;
         double height_h = static_cast<double>(pool_size0) / 2.0;
         const int bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
-        //float *bf_values = new float[mem_init]; TODO: need fix
-        int npp = mem_init;    // n_poly = 150
-        float* bf_values =  new float[npp];
-        int py, px;
-        bf_sum = 0;
+        double bf_values[25]; //mem_init
+        int py, px, bf_index, grad_out_index;
         for (double y=ceil(h-height_h); y<=h+height_h; y++){
             py = y<h ? ceil(y) : floor(y);
             if (py>=H || py<0)  continue;
@@ -132,6 +142,19 @@ __global__ void backward(CudaLaunchConfig cfg,
                 bf_values[bf_index] = bf_value;
             }
         }
+        /* deleni sumou */
+        for (double y=ceil(h-height_h); y<=h+height_h; y++){
+            py = y<h ? ceil(y) : floor(y);
+            if (py>=H || py<0)  continue;
+            for (double x=ceil(w-width_h); x<=w+width_h; x++){
+                px = x<w ? ceil(x) : floor(x);
+                if (px>=W || px<0) continue;
+                bf_index = static_cast<int>(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h));
+                bf_values[bf_index] /= bf_sum;
+            }
+        }
+        
+        //printf("2--- Starting backward \n");
         for (int n = 0; n < Nx; n++){
             for (int c = 0; c < C; c++){
                 int grad_in_index = static_cast<int>(n * (int)round(H/stride0) * (int)round(W/stride1) * C + (int)round(h/stride0) * (int)round(W/stride1) * C + (int)round(w/stride1) * C + c);
@@ -141,10 +164,28 @@ __global__ void backward(CudaLaunchConfig cfg,
                     for (double x=ceil(w-width_h); x<=w+width_h; x++){
                         px = x<w ? ceil(x) : floor(x);
                         if (px>=W || px<0) continue;
-                        int bf_index = static_cast<int>(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h));
-                        int grad_out_index = static_cast<int>(n * H * W * C + py * W * C + px * C +c );
+                        bf_index = static_cast<int>(py-ceil(h-height_h))*bf_arr_w + (px-ceil(w-width_h));
+                        grad_out_index = static_cast<int>(n * H * W * C + py * W * C + px * C + c);
                         atomicAdd(&grad_out[grad_out_index], bf_values[bf_index] * grad_in[grad_in_index]);
+                        /*
+                        if(
+                            (isnan(grad_out[grad_out_index]) || isinf(grad_out[grad_out_index])) && 
+                            (!isnan(grad_in[grad_in_index]) && !isinf(grad_in[grad_in_index]))
+                        ){
+                            printf("grad_out:%f grad_in:%f bf_values:%f bf_sum:%f calc result:%f result is nan:%d, result is inf:%d\n",grad_out[grad_out_index],
+                             grad_in[grad_in_index], bf_values[bf_index], bf_sum, bf_values[bf_index] / bf_sum * grad_in[grad_in_index],
+                             isnan(bf_values[bf_index] / bf_sum * grad_in[grad_in_index]), isinf(bf_values[bf_index] / bf_sum * grad_in[grad_in_index]));
+                        }
+                        if(
+                            (isnan(grad_out[grad_out_index]) || isinf(grad_out[grad_out_index])) &&
+                            (!isnan(grad_in[grad_in_index]) && !isinf(grad_in[grad_in_index])) &&
+                            (isnan(bf_values[bf_index] / bf_sum * grad_in[grad_in_index]) || isinf(bf_values[bf_index] / bf_sum * grad_in[grad_in_index]))
+                            ){
+                                printf("nasel jsem to\n");
+                            }*/
+                        //if((int)round(w/stride1) == ww && (int)round(h/stride0) == hh && DEBUG_PRINT) printf("[y:%d,x:%d] %3.3f * %3.3f\t", py, px, bf_values[bf_index], grad_in[grad_in_index]);                        
                     }
+                    //if((int)round(w/stride1) == ww && (int)round(h/stride0) == hh && DEBUG_PRINT) printf("\n");
                 }
             }
         }
@@ -187,7 +228,9 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
     int mem_init = 42;
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
-
+    //printf("forward dimBlock [%d, %d], dimGrid [%d, %d] \n", dimBlock.x, dimBlock.y, dimGrid.x, dimGrid.y);
+    if(DEBUG_PRINT) printf("GPU Forward Start\n");
+    if(DEBUG_PRINT) std::cout << typeid(Dtype).name() << std::endl;
     forward<Dtype><<<dimGrid, dimBlock, 0, d.stream()>>>(
         cfg,
         input.flat<Dtype>().data(),
@@ -207,6 +250,33 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
       ctx->SetStatus(
           tensorflow::errors::Internal("Failed launching FtPool on GPU"));
     }
+    if(DEBUG_PRINT) printf("GPU Forward End\n");
+    
+    //copy output from device to host and print that shit out    
+    /*
+    if(DEBUG_PRINT){
+    size_t size = Nxoutput * Houtput * Woutput * Coutput * sizeof(Dtype);
+    printf("Number of components is %d\n", Nxoutput * Houtput * Woutput * Coutput);
+    Dtype *p;
+    cudaError_t e;
+    e = cudaMallocHost(&p, size);
+    printf("cudaMallocHost status: %d\n", e);
+    e = cudaMemcpy(p, output->flat<Dtype>().data(), size, cudaMemcpyKind::cudaMemcpyDeviceToHost);
+    printf("cudaMemcpy status: %d\n", e);
+    std::ofstream myLog ("gpu_components.txt");
+    for(int n=0; n<Nxoutput; n++){
+        for(int y=0; y<Houtput; y++){
+            for(int x=0; x<Woutput; x++){
+                for(int c=0; c<Coutput; c++){
+                    myLog << std::fixed << p[n * Houtput * Woutput * Coutput + y * Woutput * Coutput + x * Coutput + c] << "\t";
+                }
+            }
+            myLog << std::endl;
+        } 
+    }
+    e = cudaFreeHost(p);
+    printf("cudaFreeHost status: %d\n", e);
+    }*/
   }
 };
 
@@ -256,7 +326,8 @@ struct FtPoolGrad<GPUDevice, Dtype> {
       grad_out->flat<Dtype>().data(),
       pom_s
     );
-
+    if(DEBUG_PRINT) printf("GPU Backward Start\n");
+    if(DEBUG_PRINT) std::cout << typeid(Dtype).name() << std::endl;
     backward<Dtype><<<dimGrid, dimBlock, 0, d.stream()>>> (
       cfg,
       grad_in.flat<Dtype>().data(),
@@ -271,6 +342,7 @@ struct FtPoolGrad<GPUDevice, Dtype> {
       C,
       mem_init
       );
+    if(DEBUG_PRINT) printf("GPU Backward End\n");
     cudaDeviceSynchronize();
 
     if (!d.ok()) {
@@ -278,7 +350,31 @@ struct FtPoolGrad<GPUDevice, Dtype> {
       ctx->SetStatus(tensorflow::errors::Internal(
           "Failed launching FtPoolGrad on GPU"));
     }
-
+    //copy output from device to host and print that shit out   
+   /* if(DEBUG_PRINT){ 
+    size_t size = Nx * H * W * C * sizeof(Dtype);
+    printf("Number of gradients is %d\n", Nx * H * W * C);
+    printf("gpu grad dims[%d, %d, %d, %d]\n", Nx, H, W, C);
+    Dtype *p;
+    cudaError_t e;
+    e = cudaMallocHost(&p, size);
+    printf("cudaMallocHost status: %d\n", e);
+    e = cudaMemcpy(p, grad_out->flat<Dtype>().data(), size, cudaMemcpyKind::cudaMemcpyDeviceToHost);
+    printf("cudaMemcpy status: %d\n", e);    
+    std::ofstream myLog ("gpu_gradients.txt");
+    for(int n=0; n<Nx; n++){
+        for(int y=0; y<H; y++){
+            for(int x=0; x<W; x++){
+                for(int c=0; c<C; c++){
+                    myLog << std::fixed << p[n * H * W * C + y * W * C + x * C + c] << "\t";
+                }
+            }
+            myLog << std::endl;
+        } 
+    }
+    e = cudaFreeHost(p);
+    printf("cudaFreeHost status: %d\n", e);
+    }*/
   }
 };
 
@@ -288,4 +384,4 @@ template struct FtPoolGrad<GPUDevice, double>;
 }  // namespace functor
 }  // namespace tensorflow
 
-#endif  // GOOGLE_CUDA
+//#endif  // GOOGLE_CUDA
