@@ -41,7 +41,9 @@ __global__ void forward(CudaLaunchConfig cfg,
         double height_h = static_cast<double>(pool_size0) / 2.0;
         double bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
         //float *bf_values = new float[mem_init]; TODO: need fix
-        float bf_values[49]; //mem_init
+        //float bf_values[49]; //mem_init
+        int npp = mem_init;    // n_poly = 150
+        float* bf_values =  new float[npp];
         int py, px;
         bf_sum = 0;
         for (double y=ceil(h-height_h); y<=h+height_h; y++){
@@ -76,6 +78,7 @@ __global__ void forward(CudaLaunchConfig cfg,
                 out_tensor[out_tensor_index] /= bf_sum;
             }
         }
+        delete[] bf_values;
     }
 }
 
@@ -111,7 +114,8 @@ __global__ void backward(CudaLaunchConfig cfg,
         double height_h = static_cast<double>(pool_size0) / 2.0;
         const int bf_arr_w = ceil(2*width_h), bf_arr_h = ceil(2*height_h);
         //float *bf_values = new float[mem_init]; TODO: need fix
-        float bf_values[49]; //mem_init
+        int npp = mem_init;    // n_poly = 150
+        float* bf_values =  new float[npp];
         int py, px;
         bf_sum = 0;
         for (double y=ceil(h-height_h); y<=h+height_h; y++){
@@ -144,6 +148,7 @@ __global__ void backward(CudaLaunchConfig cfg,
                 }
             }
         }
+        delete[] bf_values;
     }
 }
 }//anonymous namespace
@@ -177,9 +182,9 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
     ::tensorflow::CudaLaunchConfig cfg =
         ::tensorflow::GetCudaLaunchConfig(8, d);
 
-    int const BC_S = 12;
+    int const BC_S = 32;
     int block = floor(sqrt(props.maxThreadsPerBlock)) - BC_S;
-    int mem_init = 15;
+    int mem_init = 112;
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
 
@@ -236,9 +241,9 @@ struct FtPoolGrad<GPUDevice, Dtype> {
     ::tensorflow::CudaLaunchConfig cfg =
         ::tensorflow::GetCudaLaunchConfig(8, d);
 
-    int const BC_S = 12;
+    int const BC_S = 32;
     int block = floor(sqrt(props.maxThreadsPerBlock)) - BC_S;
-    int mem_init = 15;
+    int mem_init = 112;
 
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
