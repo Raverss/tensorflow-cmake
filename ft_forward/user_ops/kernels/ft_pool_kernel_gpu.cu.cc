@@ -182,9 +182,9 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
     ::tensorflow::CudaLaunchConfig cfg =
         ::tensorflow::GetCudaLaunchConfig(8, d);
 
-    int const BC_S = 32;
+    int const BC_S = 36;
     int block = floor(sqrt(props.maxThreadsPerBlock)) - BC_S;
-    int mem_init = 112;
+    int mem_init = 92;
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
 
@@ -241,9 +241,9 @@ struct FtPoolGrad<GPUDevice, Dtype> {
     ::tensorflow::CudaLaunchConfig cfg =
         ::tensorflow::GetCudaLaunchConfig(8, d);
 
-    int const BC_S = 32;
+    int const BC_S = 36;
     int block = floor(sqrt(props.maxThreadsPerBlock)) - BC_S;
-    int mem_init = 112;
+    int mem_init = 92;
 
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
