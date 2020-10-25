@@ -184,7 +184,7 @@ struct FtPoolFunctor<GPUDevice, Dtype> {
 
     int const BC_S = 36;
     int block = floor(sqrt(props.maxThreadsPerBlock)) - BC_S;
-    int mem_init = 92;
+    int mem_init = 42;
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
 
@@ -243,7 +243,7 @@ struct FtPoolGrad<GPUDevice, Dtype> {
 
     int const BC_S = 36;
     int block = floor(sqrt(props.maxThreadsPerBlock)) - BC_S;
-    int mem_init = 92;
+    int mem_init = 42;
 
     dim3 dimBlock(block, block);
     dim3 dimGrid((int)ceil(pool_w / dimBlock.x), (int)ceil(pool_h / dimBlock.y));
