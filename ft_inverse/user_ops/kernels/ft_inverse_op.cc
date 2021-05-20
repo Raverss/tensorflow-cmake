@@ -3,16 +3,16 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
-#include "ft_pool_op.h"
+#include "ft_inverse_op.h"
 
 namespace tensorflow {
 
 // Forward-Pass (CPU, GPU)
 // --------------------------------------------------
 template <typename Device, typename Dtype>
-class FtPoolOp : public OpKernel {
+class FtInverseOp : public OpKernel {
  public:
-  explicit FtPoolOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
+  explicit FtInverseOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("stride", &stride));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("pool_size", &pool_size));
   }
@@ -29,15 +29,15 @@ class FtPoolOp : public OpKernel {
     const int W = input.dim_size(2);
     const int C = input.dim_size(3);
 
-    TensorShape output_shape({N, static_cast<int>(round(H/stride[0])), static_cast<int>(round(W/stride[1])), C});
+    TensorShape output_shape({N, static_cast<int>(round(H*stride[0])), static_cast<int>(round(W*stride[1])), C});
 
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, output_shape, &output));
-    ::tensorflow::functor::FtPoolFunctor<Device, Dtype>::launch(ctx, input, output, stride, pool_size);
+    ::tensorflow::functor::FtInverseFunctor<Device, Dtype>::launch(ctx, input, output, stride, pool_size);
   }
 
  private:
-  TF_DISALLOW_COPY_AND_ASSIGN(FtPoolOp);
+  TF_DISALLOW_COPY_AND_ASSIGN(FtInverseOp);
   std::vector<float> stride;
   std::vector<float> pool_size;
 };
@@ -45,9 +45,9 @@ class FtPoolOp : public OpKernel {
 // Backward-Pass (CPU, GPU)
 // --------------------------------------------------
 template <typename Device, typename Dtype>
-class FtPoolGradOp : public OpKernel {
+class FtInverseGradOp : public OpKernel {
  public:
-  explicit FtPoolGradOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
+  explicit FtInverseGradOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
         OP_REQUIRES_OK(ctx, ctx->GetAttr("stride", &stride));
         OP_REQUIRES_OK(ctx, ctx->GetAttr("pool_size", &pool_size));
     }
@@ -62,7 +62,7 @@ class FtPoolGradOp : public OpKernel {
 
     Tensor* grad_out = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, input.shape(), &grad_out));
-    ::tensorflow::functor::FtPoolGrad<Device, Dtype>::launch(ctx, grad_in, grad_out, stride, pool_size);
+    ::tensorflow::functor::FtInverseGrad<Device, Dtype>::launch(ctx, grad_in, grad_out, stride, pool_size);
   }
 
 private:
@@ -75,11 +75,11 @@ private:
       Name(#NAME).Device(DEVICE_##DEVICE).TypeConstraint<T>("T"), \
       NAME##Op<DEVICE##Device, T>)
 
-REGISTER_CUSTOM_OP(FtPool, CPU, uint32);
-REGISTER_CUSTOM_OP(FtPool, CPU, int32);
-REGISTER_CUSTOM_OP(FtPool, CPU, float);
-REGISTER_CUSTOM_OP(FtPool, CPU, double);
-REGISTER_CUSTOM_OP(FtPoolGrad, CPU, float);
-REGISTER_CUSTOM_OP(FtPoolGrad, CPU, double);
+REGISTER_CUSTOM_OP(FtInverse, CPU, uint32);
+REGISTER_CUSTOM_OP(FtInverse, CPU, int32);
+REGISTER_CUSTOM_OP(FtInverse, CPU, float);
+REGISTER_CUSTOM_OP(FtInverse, CPU, double);
+REGISTER_CUSTOM_OP(FtInverseGrad, CPU, float);
+REGISTER_CUSTOM_OP(FtInverseGrad, CPU, double);
 
 }  // namespace tensorflow
